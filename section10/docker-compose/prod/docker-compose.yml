@@ -1,0 +1,230 @@
+services:
+
+  # ========== STAGE 1: INFRASTRUCTURE ==========
+
+  rabbit:
+    image: rabbitmq:3.13-management
+    container_name: rabbit-ms          
+    hostname: rabbit
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  accountsdb:
+    image: mysql:8.0
+    container_name: accountsdb
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app1db
+      MYSQL_USER: app1user
+      MYSQL_PASSWORD: app1pass
+    ports:
+      - "3301:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  cardsdb:
+    image: mysql:8.0
+    container_name: cardsdb
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app2db
+      MYSQL_USER: app2user
+      MYSQL_PASSWORD: app2pass
+    ports:
+      - "3302:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  loansdb:
+    image: mysql:8.0
+    container_name: loansdb
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app3db
+      MYSQL_USER: app3user
+      MYSQL_PASSWORD: app3pass
+    ports:
+      - "3303:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  redis:
+    image: redis:latest
+    container_name: redis-ms
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  # ========== STAGE 2: CONFIG SERVER ==========
+
+  configserver:
+    image: prateekarya100/configserver:s10
+    container_name: configserver-ms
+    ports:
+      - "8071:8071"
+    environment:
+      SPRING_CLOUD_CONFIG_SERVER_GIT_URI: "https://github.com/prateekarya100/configserver.git"
+      SPRING_PROFILES_ACTIVE: git
+      SPRING_CLOUD_CONFIG_SERVER_GIT_DEFAULT_LABEL: main
+    depends_on:
+      rabbit:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://configserver-ms:8071/actuator/health/readiness | grep UP || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    extends:
+      file: common-config.yml
+      service: microservice-base-config
+
+  # ========== STAGE 3: SERVICE DISCOVERY ==========
+
+  eureka:
+    image: prateekarya100/eureka:s10
+    container_name: eureka-ms
+    ports:
+      - "8761:8761"
+    environment:
+      SPRING_APPLICATION_NAME: eurekaserver
+    depends_on:
+      configserver:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://eureka-ms:8761/actuator/health | grep UP || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    extends:
+      file: common-config.yml
+      service: microservice-configserver-config
+
+  # ========== STAGE 4: MICROSERVICES ==========
+
+  accounts:
+    image: prateekarya100/accounts:s10
+    container_name: accounts-ms
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_APPLICATION_NAME: accounts
+      SPRING_DATASOURCE_URL: jdbc:mysql://accountsdb:3306/app1db
+      SPRING_DATASOURCE_USERNAME: app1user
+      SPRING_DATASOURCE_PASSWORD: app1pass
+    depends_on:
+      configserver:
+        condition: service_healthy
+      accountsdb:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    extends:
+      file: common-config.yml
+      service: microservice-configserver-config
+
+  cards:
+    image: prateekarya100/cards:s10
+    container_name: cards-ms
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_APPLICATION_NAME: cards
+      SPRING_DATASOURCE_URL: jdbc:mysql://cardsdb:3306/app2db
+      SPRING_DATASOURCE_USERNAME: app2user
+      SPRING_DATASOURCE_PASSWORD: app2pass
+    depends_on:
+      configserver:
+        condition: service_healthy
+      cardsdb:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    extends:
+      file: common-config.yml
+      service: microservice-configserver-config
+
+  loans:
+    image: prateekarya100/loans:s10
+    container_name: loans-ms
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_APPLICATION_NAME: loans
+      SPRING_DATASOURCE_URL: jdbc:mysql://loansdb:3306/app3db
+      SPRING_DATASOURCE_USERNAME: app3user
+      SPRING_DATASOURCE_PASSWORD: app3pass
+    depends_on:
+      configserver:
+        condition: service_healthy
+      loansdb:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    extends:
+      file: common-config.yml
+      service: microservice-configserver-config
+
+  # ========== STAGE 5: GATEWAY ==========
+
+  gatewayserver:
+    image: prateekarya100/gatewayserver:s10
+    container_name: gatewayserver-ms
+    ports:
+      - "8072:8072"
+    environment:
+      SPRING_APPLICATION_NAME: gatewayserver
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+    depends_on:
+      eureka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    extends:
+      file: common-config.yml
+      service: microservice-configserver-config
+
+networks:
+  eazybank:
+    driver: bridge
