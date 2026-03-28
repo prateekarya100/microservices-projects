@@ -1,0 +1,19 @@
+module.exports = {
+  purge: ["./src/**/*.{js,jsx,ts,tsx}", "./public/index.html"],
+  darkMode: false,
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          50: "#f0f9ff",
+          500: "#0ea5e9",
+          600: "#0284c7",
+        },
+      },
+    },
+  },
+  variants: {
+    extend: {},
+  },
+  plugins: [],
+};

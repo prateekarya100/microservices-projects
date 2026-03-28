@@ -1,0 +1,88 @@
+spring:
+  application:
+    name: gatewayserver
+
+  config:
+    import:
+      - optional:configserver:http://localhost:8071
+
+  cloud:
+    gateway:
+      actuator:
+        enabled: true           # Enables /actuator/gateway
+      discovery:
+        locator:
+          enabled: true         # Auto-create routes from Eureka
+          lower-case-service-id: true
+      routes:
+        - id: accounts-service
+          uri: lb://ACCOUNTS
+          predicates:
+            - Path=/accounts/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: accountsCircuit
+                fallbackUri: forward:/fallback/accounts
+
+        - id: cards-service
+          uri: lb://CARDS
+          predicates:
+            - Path=/cards/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: cardsCircuit
+                fallbackUri: forward:/fallback/cards
+
+        - id: loans-service
+          uri: lb://LOANS
+          predicates:
+            - Path=/loans/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: loansCircuit
+                fallbackUri: forward:/fallback/loans
+
+
+
+eureka:
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${server.port}
+
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: http://eureka-ms:8761/eureka/
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    gateway:
+      access: unrestricted
+    health:
+      show-details: always
+
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        registerHealthIndicator: true
+        slidingWindowSize: 5
+        minimumNumberOfCalls: 3
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+    instances:
+      accountsCircuit:
+        baseConfig: default
+      cardsCircuit:
+        baseConfig: default
+      loansCircuit:
+        baseConfig: default
