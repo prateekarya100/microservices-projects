@@ -16,10 +16,10 @@ spring:
 #    password: ''
 #    driverClassName: org.h2.Driver
 #      url: "jdbc:mysql://localhost:3308/cardsdb"
-      url: "jdbc:mysql://localhost:3306/microservices"
-      username: "root"
-      password: "root"
-      driver-class-name: "com.mysql.cj.jdbc.Driver"
+    url: "jdbc:mysql://localhost:3306/microservices"
+    username: "root"
+    password: "root"
+    driver-class-name: "com.mysql.cj.jdbc.Driver"
 
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
@@ -48,6 +48,10 @@ management:
   info:
     env:
       enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 endpoints:
   shutdown:
     enabled: true
