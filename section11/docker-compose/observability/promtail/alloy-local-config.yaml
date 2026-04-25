@@ -11,9 +11,11 @@
 		regex         = "/(.*)"
 		target_label  = "container"
 		}
-		
+	
 		rule {
 		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)-ms"
+		replacement   = "$1"
 		target_label  = "job"
 		}
 		
@@ -24,9 +26,9 @@
 	}
 		
 		loki.source.docker "flog_scrape" {
-		host             = "unix:///var/run/docker.sock"
-		targets          = discovery.relabel.flog_scrape.output  
-		forward_to       = [loki.write.default.receiver]
+		host       = "unix:///var/run/docker.sock"
+		targets    = discovery.relabel.flog_scrape.output
+		forward_to = [loki.write.default.receiver]
 	}
 		
 		loki.write "default" {
