@@ -17,6 +17,7 @@ import jakarta.validation.constraints.Pattern;
 import lombok.AllArgsConstructor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -38,6 +39,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 //@AllArgsConstructor
 @EnableConfigurationProperties(value = {ContactInfoLoansDevTeam.class})
 public class LoansController {
+
+    private static final org.slf4j.Logger logger = LoggerFactory.getLogger(LoansController.class);
 
     private static final Logger log = LogManager.getLogger(LoansController.class);
     private final ILoansService loansService;
@@ -119,10 +122,13 @@ public class LoansController {
     )
     @GetMapping(value = "/fetchLoan")
     public ResponseEntity<LoansDto> fetchLoans(
+            @RequestHeader(value = "eazybank-correlation-id", required = false) String correlationId,
             @RequestParam
             @Pattern(regexp = "^$|[0-9]{10}",message = "mobile number must be of 10 digit only")
             String mobileNumber) {
+        logger.info("eazybank-correlation-start");
         LoansDto loansDto = loansService.fetchLoanDetails(mobileNumber);
+        logger.info("eazybank-correlation-end");
         if (loansDto != null){
             return ResponseEntity.status(HttpStatus.OK)
                     .body(loansDto);

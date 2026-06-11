@@ -56,6 +56,14 @@ management:
     tags:
       application: ${spring.application.name}
 
+  tracing:
+    sampling:
+      probability: 1.0
+
+    otlp:
+      tracing:
+        endpoint: http://tempo:4318/v1/traces
+
 endpoints:
   shutdown:
     enabled: true
@@ -81,6 +89,11 @@ info:
 logging:
   level:
     com.tomcat.Loans: DEBUG
+    org:
+      springframework:
+        web: DEBUG
+  pattern:
+    level: "%5p [${spring.application.name:},traceId=%X{traceId:-},spanId=%X{spanId:-}]"
 
 
 # ADDING RESILIENCE4J RATE LIMITER USING THIS DEPENDENCY AT CONTROLLER LEVEL

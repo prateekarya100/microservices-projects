@@ -96,6 +96,19 @@ services:
       file: common-config.yml
       service: network-deploy-service
 
+  tempo:
+    image: grafana/tempo:2.9.0
+    container_name: tempo
+    command: -config.file /etc/tempo-config.yml
+    ports:
+      - "3110:3100"
+      - "4317:4317"
+    volumes:
+      - ../observability/tempo/tempo.yml:/etc/tempo-config.yml
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
   grafana:
     image: grafana/grafana:latest
     environment:
@@ -210,6 +223,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    environment:
+      OTEL_SERVICE_NAME: "gateway"
+
     extends:
       file: common-config.yml
       service: network-deploy-service
@@ -218,7 +234,7 @@ services:
 
   rabbit:
     image: rabbitmq:3.13-management
-    container_name: rabbit-ms          
+    container_name: rabbit-ms
     hostname: rabbit
     ports:
       - "5672:5672"
@@ -282,6 +298,7 @@ services:
       MYSQL_DATABASE: app3db
       MYSQL_USER: app3user
       MYSQL_PASSWORD: app3pass
+
     ports:
       - "3303:3306"
     healthcheck:
@@ -319,6 +336,9 @@ services:
       SPRING_CLOUD_CONFIG_SERVER_GIT_URI: "https://github.com/prateekarya100/configserver.git"
       SPRING_PROFILES_ACTIVE: git
       SPRING_CLOUD_CONFIG_SERVER_GIT_DEFAULT_LABEL: main
+      OTEL_SERVICE_NAME: "configserver"
+      JAVA_TOOL_OPTIONS: ""   # ← override the base config; no agent in this image
+
     depends_on:
       rabbit:
         condition: service_healthy
@@ -341,6 +361,9 @@ services:
       - "8761:8761"
     environment:
       SPRING_APPLICATION_NAME: eurekaserver
+      TEL_SERVICE_NAME: "eurekaserver"
+      JAVA_TOOL_OPTIONS: ""   # ← same fix: no agent JAR in this image
+
     depends_on:
       configserver:
         condition: service_healthy
@@ -366,6 +389,14 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://accountsdb:3306/app1db
       SPRING_DATASOURCE_USERNAME: app1user
       SPRING_DATASOURCE_PASSWORD: app1pass
+      OTEL_SERVICE_NAME: "accounts"
+      JAVA_TOOL_OPTIONS: "-javaagent:/app/libs/opentelemetry-javaagent-1.27.0.jar"
+      #      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318 [latest version]
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
     depends_on:
       configserver:
         condition: service_healthy
@@ -387,6 +418,14 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://cardsdb:3306/app2db
       SPRING_DATASOURCE_USERNAME: app2user
       SPRING_DATASOURCE_PASSWORD: app2pass
+      OTEL_SERVICE_NAME: "cards"
+      JAVA_TOOL_OPTIONS: "-javaagent:/app/libs/opentelemetry-javaagent-1.27.0.jar"
+      #      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318 [latest version]
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
     depends_on:
       configserver:
         condition: service_healthy
@@ -408,6 +447,14 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://loansdb:3306/app3db
       SPRING_DATASOURCE_USERNAME: app3user
       SPRING_DATASOURCE_PASSWORD: app3pass
+      OTEL_SERVICE_NAME: "loans"
+      JAVA_TOOL_OPTIONS: "-javaagent:/app/libs/opentelemetry-javaagent-1.27.0.jar"
+      #      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318 [latest version]
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
     depends_on:
       configserver:
         condition: service_healthy
@@ -430,6 +477,14 @@ services:
       SPRING_APPLICATION_NAME: gatewayserver
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      OTEL_SERVICE_NAME: "gatewayserver"
+      JAVA_TOOL_OPTIONS: "-javaagent:/app/libs/opentelemetry-javaagent-1.27.0.jar"
+      #      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318 [latest version]
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
     depends_on:
       eureka:
         condition: service_healthy

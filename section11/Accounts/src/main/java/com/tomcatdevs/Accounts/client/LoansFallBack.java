@@ -9,10 +9,11 @@ public class LoansFallBack implements LoansFeignClient{
     /**
      * note--> fetching loan detail by passing mobile number
      *
+     * @param correlationId
      * @param mobileNumber
      **/
     @Override
-    public ResponseEntity<LoansDto> fetchLoans(String mobileNumber) {
+    public ResponseEntity<LoansDto> fetchLoans(String correlationId, String mobileNumber) {
         return null;
     }
 }

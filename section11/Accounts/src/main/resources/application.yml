@@ -21,7 +21,7 @@ spring:
     username: "root"
     password: "root"
     driver-class-name: "com.mysql.cj.jdbc.Driver"
-  
+
 
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
@@ -59,6 +59,14 @@ management:
     tags:
      application: ${spring.application.name}
 
+  tracing:
+    sampling:
+      probability: 1.0
+
+    otlp:
+      tracing:
+        endpoint: http://tempo:4318/v1/traces
+
 
 endpoints:
   shutdown:
@@ -87,7 +95,10 @@ logging:
     org:
       springframework:
         web: DEBUG
-
+    feign: DEBUG
+    com.tomcatdevs.Accounts: DEBUG
+  pattern:
+    level: "%5p [${spring.application.name:},traceId=%X{traceId:-},spanId=%X{spanId:-}]"
 
 resilience4j.circuitbreaker:
   configs:

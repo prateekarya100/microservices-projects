@@ -1,8 +1,6 @@
 package com.tomcatdevs.Accounts.client;
 
-import com.tomcatdevs.Accounts.dto.CardsDto;
 import com.tomcatdevs.Accounts.dto.LoansDto;
-import jakarta.validation.constraints.Pattern;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +14,7 @@ public interface LoansFeignClient {
     /** note--> fetching loan detail by passing mobile number **/
     @GetMapping(value = "/api/fetchLoan",consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<LoansDto> fetchLoans(
-            @RequestParam String mobileNumber);
+            @RequestHeader("eazybank-correlation-id")
+            String correlationId, @RequestParam String mobileNumber);
 
 }

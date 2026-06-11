@@ -46,6 +46,14 @@ management:
     tags:
       application: ${spring.application.name}
 
+  tracing:
+    sampling:
+      probability: 1.0
+
+    otlp:
+      tracing:
+        endpoint: http://tempo:4318/v1/traces
+
 info:
   app:
     name: "gatewayserver"

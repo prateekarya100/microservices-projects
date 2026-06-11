@@ -40,10 +40,11 @@ public class IConsolidatedServiceImpl implements IConsolidatedService{
 
     /**
      * @param mobileNumber
+     * @param correlationId
      * @return
      */
     @Override
-    public Optional<ConsolidatedCustomerDetailsDTO> fetchConsolidatedInfo(String mobileNumber) {
+    public Optional<ConsolidatedCustomerDetailsDTO> fetchConsolidatedInfo(String mobileNumber, String correlationId) {
 
         Customer customer = customerRepository.findByMobileNumber(mobileNumber).orElseThrow(
                 ()-> new ResourceNotFoundException("customer","mobile number",mobileNumber)
@@ -55,11 +56,11 @@ public class IConsolidatedServiceImpl implements IConsolidatedService{
         customerDetailsDTO.setAccountsDto(AccountsMapper.mapAccountsToDto(accounts,new AccountsDto()));
 
         // get information from cards and loans microservices
-        ResponseEntity<CardsDto> cardsDtoResponseEntity = cardsFeignClient.fetchCardByMobileNumber(mobileNumber);
+        ResponseEntity<CardsDto> cardsDtoResponseEntity = cardsFeignClient.fetchCardByMobileNumber(correlationId,mobileNumber);
         if (cardsDtoResponseEntity!=null){
             customerDetailsDTO.setCardsDto(cardsDtoResponseEntity.getBody());
         }
-        ResponseEntity<LoansDto> loansDtoResponseEntity = loansFeignClient.fetchLoans(mobileNumber);
+        ResponseEntity<LoansDto> loansDtoResponseEntity = loansFeignClient.fetchLoans(correlationId,mobileNumber);
         if (loansDtoResponseEntity!=null){
             customerDetailsDTO.setLoansDto(loansDtoResponseEntity.getBody());
         }

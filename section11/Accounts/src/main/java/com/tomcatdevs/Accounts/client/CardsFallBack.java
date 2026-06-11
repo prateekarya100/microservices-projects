@@ -9,10 +9,11 @@ public class CardsFallBack implements CardsFeignClient{
     /**
      * note--> fetching card detail by passing mobile number
      *
+     * @param correlationId
      * @param mobileNumber
      **/
     @Override
-    public ResponseEntity<CardsDto> fetchCardByMobileNumber(String mobileNumber) {
+    public ResponseEntity<CardsDto> fetchCardByMobileNumber(String correlationId, String mobileNumber) {
         return null;
     }
 }
