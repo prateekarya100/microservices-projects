@@ -1,0 +1,499 @@
+services:
+  # ========== STAGE 0: ADD OBSERVABILITY =======
+  read:
+    image: grafana/loki:latest
+    command: "-config.file=/etc/loki/config.yaml -target=read"
+    ports:
+      - 3101:3100
+      - 7946
+      - 9095
+    volumes:
+      - ../observability/loki/loki-config.yaml:/etc/loki/config.yaml
+    depends_on:
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "/usr/bin/loki", "-health" ]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: &loki-dns
+      eazybank:
+        aliases:
+          - loki
+
+  write:
+    image: grafana/loki:latest
+    command: "-config.file=/etc/loki/config.yaml -target=write"
+    ports:
+      - 3102:3100
+      - 7946
+      - 9095
+    volumes:
+      - ../observability/loki/loki-config.yaml:/etc/loki/config.yaml
+    healthcheck:
+      test: [ "CMD", "/usr/bin/loki", "-health" ]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      <<: *loki-dns
+
+  alloy:
+    image: grafana/alloy:latest
+    volumes:
+      - ../observability/promtail/alloy-local-config.yaml:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:  run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    ports:
+      - 12345:12345
+    depends_on:
+      - gateway
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  minio:
+    image: minio/minio
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /data/loki-data && \
+        mkdir -p /data/loki-ruler && \
+        minio server /data
+    environment:
+      - MINIO_ROOT_USER=loki
+      - MINIO_ROOT_PASSWORD=supersecret
+      - MINIO_PROMETHEUS_AUTH_TYPE=public
+      - MINIO_UPDATE=off
+    ports:
+      - 9000
+    volumes:
+      - ./.data/minio:/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 15s
+      timeout: 20s
+      retries: 5
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  prometheus:
+    image: prom/prometheus:v3.8.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  tempo:
+    image: grafana/tempo:2.9.0
+    container_name: tempo
+    command: -config.file /etc/tempo-config.yml
+    ports:
+      - "3110:3100"
+      - "4317:4317"
+    volumes:
+      - ../observability/tempo/tempo.yml:/etc/tempo-config.yml
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    depends_on:
+      - gateway
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        /run.sh
+    ports:
+      - "3000:3000"
+    volumes:
+          - ../observability/grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  backend:
+    image: grafana/loki:latest
+    volumes:
+      - ../observability/loki/loki-config.yaml:/etc/loki/config.yaml
+    ports:
+      - "3100"
+      - "7946"
+    command: "-config.file=/etc/loki/config.yaml -target=backend -legacy-read-mode=false"
+    depends_on:
+      - gateway
+      - minio
+    healthcheck:
+      test: [ "CMD", "/usr/bin/loki", "-health" ]
+      start_period: 30s
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+
+  gateway:
+    image: nginx:latest
+    depends_on:
+      - read
+      - write
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        cat <<EOF > /etc/nginx/nginx.conf
+        user  nginx;
+        worker_processes  5;  ## Default: 1
+
+        events {
+          worker_connections   1000;
+        }
+
+        http {
+          resolver 127.0.0.11;
+
+          server {
+            listen             3100;
+
+            location = / {
+              return 200 'OK';
+              auth_basic off;
+            }
+
+            location = /api/prom/push {
+              proxy_pass       http://write:3100\$$request_uri;
+            }
+
+            location = /api/prom/tail {
+              proxy_pass       http://read:3100\$$request_uri;
+              proxy_set_header Upgrade \$$http_upgrade;
+              proxy_set_header Connection "upgrade";
+            }
+
+            location ~ /api/prom/.* {
+              proxy_pass       http://read:3100\$$request_uri;
+            }
+
+            location = /loki/api/v1/push {
+              proxy_pass       http://write:3100\$$request_uri;
+            }
+
+            location = /loki/api/v1/tail {
+              proxy_pass       http://read:3100\$$request_uri;
+              proxy_set_header Upgrade \$$http_upgrade;
+              proxy_set_header Connection "upgrade";
+            }
+
+            location ~ /loki/api/.* {
+              proxy_pass       http://read:3100\$$request_uri;
+            }
+          }
+        }
+        EOF
+        /docker-entrypoint.sh nginx -g "daemon off;"
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD", "service", "nginx", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      OTEL_SERVICE_NAME: "gateway"
+
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  # ========== STAGE 1: INFRASTRUCTURE ==========
+
+  rabbit:
+    image: rabbitmq:3.13-management
+    container_name: rabbit-ms
+    hostname: rabbit
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  accountsdb:
+    image: mysql:8.0
+    container_name: accountsdb
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app1db
+      MYSQL_USER: app1user
+      MYSQL_PASSWORD: app1pass
+    ports:
+      - "3301:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  cardsdb:
+    image: mysql:8.0
+    container_name: cardsdb
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app2db
+      MYSQL_USER: app2user
+      MYSQL_PASSWORD: app2pass
+    ports:
+      - "3302:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  loansdb:
+    image: mysql:8.0
+    container_name: loansdb
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app3db
+      MYSQL_USER: app3user
+      MYSQL_PASSWORD: app3pass
+
+    ports:
+      - "3303:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  redis:
+    image: redis:latest
+    container_name: redis-ms
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  # ========== STAGE 2: CONFIG SERVER ==========
+
+  configserver:
+    image: prateekarya100/configserver:s11
+    container_name: configserver-ms
+    ports:
+      - "8071:8071"
+    environment:
+      SPRING_CLOUD_CONFIG_SERVER_GIT_URI: "https://github.com/prateekarya100/configserver.git"
+      SPRING_PROFILES_ACTIVE: git
+      SPRING_CLOUD_CONFIG_SERVER_GIT_DEFAULT_LABEL: main
+      OTEL_SERVICE_NAME: "configserver"
+      JAVA_TOOL_OPTIONS: ""   # ← override the base config; no agent in this image
+
+    depends_on:
+      rabbit:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://configserver-ms:8071/actuator/health/readiness | grep UP || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    extends:
+      file: common-config.yml
+      service: microservice-base-config
+
+  # ========== STAGE 3: SERVICE DISCOVERY ==========
+
+  eureka:
+    image: prateekarya100/eureka:s11
+    container_name: eureka-ms
+    ports:
+      - "8761:8761"
+    environment:
+      SPRING_APPLICATION_NAME: eurekaserver
+      TEL_SERVICE_NAME: "eurekaserver"
+      JAVA_TOOL_OPTIONS: ""   # ← same fix: no agent JAR in this image
+
+    depends_on:
+      configserver:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://eureka-ms:8761/actuator/health | grep UP || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    extends:
+      file: common-config.yml
+      service: microservice-configserver-config
+
+  # ========== STAGE 4: MICROSERVICES ==========
+
+  accounts:
+    image: prateekarya100/accounts:s11
+    container_name: accounts-ms
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_APPLICATION_NAME: accounts
+      SPRING_DATASOURCE_URL: jdbc:mysql://accountsdb:3306/app1db
+      SPRING_DATASOURCE_USERNAME: app1user
+      SPRING_DATASOURCE_PASSWORD: app1pass
+      OTEL_SERVICE_NAME: "accounts"
+      JAVA_TOOL_OPTIONS: "-javaagent:/app/libs/opentelemetry-javaagent-1.27.0.jar"
+      #      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318 [latest version]
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
+    depends_on:
+      configserver:
+        condition: service_healthy
+      accountsdb:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    extends:
+      file: common-config.yml
+      service: microservice-configserver-config
+
+  cards:
+    image: prateekarya100/cards:s11
+    container_name: cards-ms
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_APPLICATION_NAME: cards
+      SPRING_DATASOURCE_URL: jdbc:mysql://cardsdb:3306/app2db
+      SPRING_DATASOURCE_USERNAME: app2user
+      SPRING_DATASOURCE_PASSWORD: app2pass
+      OTEL_SERVICE_NAME: "cards"
+      JAVA_TOOL_OPTIONS: "-javaagent:/app/libs/opentelemetry-javaagent-1.27.0.jar"
+      #      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318 [latest version]
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
+    depends_on:
+      configserver:
+        condition: service_healthy
+      cardsdb:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    extends:
+      file: common-config.yml
+      service: microservice-configserver-config
+
+  loans:
+    image: prateekarya100/loans:s11
+    container_name: loans-ms
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_APPLICATION_NAME: loans
+      SPRING_DATASOURCE_URL: jdbc:mysql://loansdb:3306/app3db
+      SPRING_DATASOURCE_USERNAME: app3user
+      SPRING_DATASOURCE_PASSWORD: app3pass
+      OTEL_SERVICE_NAME: "loans"
+      JAVA_TOOL_OPTIONS: "-javaagent:/app/libs/opentelemetry-javaagent-1.27.0.jar"
+      #      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318 [latest version]
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
+    depends_on:
+      configserver:
+        condition: service_healthy
+      loansdb:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    extends:
+      file: common-config.yml
+      service: microservice-configserver-config
+
+  # ========== STAGE 5: GATEWAY ==========
+
+  gatewayserver:
+    image: prateekarya100/gatewayserver:s11
+    container_name: gatewayserver-ms
+    ports:
+      - "8072:8072"
+    environment:
+      SPRING_APPLICATION_NAME: gatewayserver
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      OTEL_SERVICE_NAME: "gatewayserver"
+      JAVA_TOOL_OPTIONS: "-javaagent:/app/libs/opentelemetry-javaagent-1.27.0.jar"
+      #      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318 [latest version]
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
+    depends_on:
+      eureka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    extends:
+      file: common-config.yml
+      service: microservice-configserver-config
+
+networks:
+  eazybank:
+    driver: bridge
