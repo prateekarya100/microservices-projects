@@ -1,4 +1,19 @@
 services:
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.7
+    container_name: keycloak
+    ports:
+      - "127.0.0.1:7080:8080"
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: "tomcat"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "tomcat"
+    command: "start-dev"
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+
   # ========== STAGE 0: ADD OBSERVABILITY =======
   read:
     image: grafana/loki:latest
@@ -328,7 +343,7 @@ services:
   # ========== STAGE 2: CONFIG SERVER ==========
 
   configserver:
-    image: prateekarya100/configserver:s11
+    image: prateekarya100/configserver:s12
     container_name: configserver-ms
     ports:
       - "8071:8071"
@@ -355,7 +370,7 @@ services:
   # ========== STAGE 3: SERVICE DISCOVERY ==========
 
   eureka:
-    image: prateekarya100/eureka:s11
+    image: prateekarya100/eureka:s12
     container_name: eureka-ms
     ports:
       - "8761:8761"
@@ -380,10 +395,15 @@ services:
   # ========== STAGE 4: MICROSERVICES ==========
 
   accounts:
-    image: prateekarya100/accounts:s11
+    image: prateekarya100/accounts:s12
     container_name: accounts-ms
-    ports:
-      - "8081:8081"
+      #    --------------------------------------------------------------------------
+      #    NO need to expose service individually by port mapping instead they
+      #    automatically being used by other services inside the same docker network
+    #    by just using service names directly.
+    #    --------------------------------------------------------------------------
+    #    ports:
+    #      - "8083:8083"
     environment:
       SPRING_APPLICATION_NAME: accounts
       SPRING_DATASOURCE_URL: jdbc:mysql://accountsdb:3306/app1db
@@ -409,10 +429,15 @@ services:
       service: microservice-configserver-config
 
   cards:
-    image: prateekarya100/cards:s11
+    image: prateekarya100/cards:s12
     container_name: cards-ms
-    ports:
-      - "8082:8082"
+      #    --------------------------------------------------------------------------
+      #    NO need to expose service individually by port mapping instead they
+      #    automatically being used by other services inside the same docker network
+    #    by just using service names directly.
+    #    --------------------------------------------------------------------------
+    #    ports:
+    #      - "8083:8083"
     environment:
       SPRING_APPLICATION_NAME: cards
       SPRING_DATASOURCE_URL: jdbc:mysql://cardsdb:3306/app2db
@@ -438,10 +463,15 @@ services:
       service: microservice-configserver-config
 
   loans:
-    image: prateekarya100/loans:s11
+    image: prateekarya100/loans:s12
     container_name: loans-ms
-    ports:
-      - "8083:8083"
+    #    --------------------------------------------------------------------------
+    #    NO need to expose service individually by port mapping instead they
+    #    automatically being used by other services inside the same docker network
+    #    by just using service names directly.
+    #    --------------------------------------------------------------------------
+    #    ports:
+    #      - "8083:8083"
     environment:
       SPRING_APPLICATION_NAME: loans
       SPRING_DATASOURCE_URL: jdbc:mysql://loansdb:3306/app3db
@@ -469,7 +499,7 @@ services:
   # ========== STAGE 5: GATEWAY ==========
 
   gatewayserver:
-    image: prateekarya100/gatewayserver:s11
+    image: prateekarya100/gatewayserver:s12
     container_name: gatewayserver-ms
     ports:
       - "8072:8072"
@@ -484,6 +514,7 @@ services:
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: none
       OTEL_LOGS_EXPORTER: none
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: "http://keycloak:8080/realms/master/protocol/openid-connect/certs"
 
     depends_on:
       eureka:
