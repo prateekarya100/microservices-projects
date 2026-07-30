@@ -1,0 +1,52 @@
+
+--------------------------
+EVENT DRIVEN MICROSERVICES
+--------------------------
+
+
+-----------------------------------------
+Avoid Temporal coupling in microservices
+-----------------------------------------
+
+Ques=> What is Synchronous VS Asynchronous communication between microservices, which one is better in which situations ?
+	   - Synchronous is used when a microservice needs an immediate response back from a different microservice
+	   - Asynchronous is used when we don't need any immediate response from other microservice, just create an event trigger and send response later once 	
+	     completed.
+   	     
+   	     example : eBanking website has => CustomerService, AccountService, LoanService, CardService
+   	     								   when a customer want to see their bank balance they click on view balance,
+   	     								   CustomerService calling AccountService to get balance related details on immediate basis. 
+
+	     example : Ecommerce website => Customer-Service , Order-Service, Delivery-Service ,Tracking-Service
+	     								when customer done order from Order-Service, where Order-Service simply shows their order placed,
+	     								but not need any Delivery,Tracking on immediate basis. order service only responsible to trigger an
+	     								event that order is placed , that event is triggers to delivery-service to response back once it is 
+	     								completed.here order-service not waited for complete response of delivery-service instead it raises
+	     								just an event trigger to delivery-service & order-service enjoys their holidays.			
+
+-----------------------------------------------------------------------------------------
+WHAT IS TEMPORAL COUPLING ?
+-----------------------------------------------------------------------------------------
+when we have multiple microservices, like ServiceA, ServiceB, ServiceC, ServiceD.
+And microservice A wants to communicate with serviceB , it sent request to serviceB
+via RestAPI during this communication if ServiceB responding too lately in that
+scenerio ServiceA waits until ServiceB did not responds this is called Temporal Coupling.
+-----------------------------------------------------------------------------------------
+
+Ques=> How can we avoid temporal coupling in a microservices architecture ?
+Ans=>  Using Asynchronous communication
+
+Ques=> How many types of approaches in synchronous communication.
+Ans=>  Imperative Approach , Reactive Approach
+
+	   1> Imperative Approach: 
+	   	-  if serviceA wants to communicate to serviceB,there will be a thread assigned to that process and that thread is blocked continuously,
+	   	   until it does not getting a response from the serviceB thats why it takes too many time to response, its a plain synchronous communication
+	   	   approach.
+
+	   2> Reactive Approach:
+	    -  there won't be any Thread get blocked instead, if a serviceA wants to communicate to serviceB, a Thread assigned to take this process under
+	       consideration for a specific time only then go back into the thread pool, and again inside the thread pool its ready to take next upcoming
+	       request to that microservice. Once the response from MicroServiceB comes into the picture again that Thread assign to process and response to
+	       'MicroServiceA'  
+
