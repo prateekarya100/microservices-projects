@@ -50,3 +50,38 @@ Ans=>  Imperative Approach , Reactive Approach
 	       request to that microservice. Once the response from MicroServiceB comes into the picture again that Thread assign to process and response to
 	       'MicroServiceA'  
 
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+														 EVENT DRIVEN BY Pub/Sub or BY Apache KAKFA
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Pub/Sub - In this model one service is published an event into message broker like RabbitMQ , that published event subscribed by other service to consume
+		  information about or an event triggered.
+		  It can not be re-played means users who joined later not able to access past events , once it is published it only available to those who subscribe that event else no other user can't able to see previous events happened.
+
+
+Apache KAFKA - Events are written to a log in a sequential manner.
+			   producer produced events and those events are stored in a well order fashion.	
+			   Instead of subscribing events consumers have the ability to read any part of the event stream.
+			   Events can be replayed, which allowing clients to join at any time and recieves all past events.
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Ques=> RabbitMQ for Pub/Sub Communication why ?
+	   - Uses AMQP (Advanced Messaging Queuing Protocol)
+	   - Distributed deployment
+	   - Monitoring of Messages
+	   - Recent versions of Rabbit-MQ, now also capable to provide event streaming
+
+	   PRODUCER - send messages (aka PUBLISHER)
+	   CONSUMER - received messages (aka SUBSCRIBER)
+	   MESSAGE BROKER - Middleware in between producer & consumer, messages sent by producer received at message broker and sent them to appropriate consumer.
+
+	   AMQP - works on two principals:
+	   							    - exchange -> sent message receive by producers and sent them to respective queues which consumers subscribed.
+	   							    - queues   -> from the respective queues inside the message broker , whatever queue subscribed by the consumer at the
+	   							    			  end of consumer side, they'll read the message from the respective queue and read the message.
+
+	   							    *** NOTE *** 
+	   							    		THERE CAN BE MULTIPLE EXCHANGES AVAILABLE, OR THERE CAN BE MULTIPLE QUEUES IT DEPENDS ON THE NO. OF EXCHANGES,QUEUES IN THE SYSTEM BY PRODUCER/CONSUMER.
+	   							    		Any producer can produce many no. of exchanges, similarly. a consumer can subscribed many no. of queues at the time. 
